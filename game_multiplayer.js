@@ -188,9 +188,12 @@ class MultiplayerGame {
         this.wordsCompleted = 0;
         this.typedText = '';
 
-        // Rendre la bombe UI visible
+        // Afficher la bombe UI et les lignes de progression
         if (this.bombUI3D) {
             this.bombUI3D.visible = true;
+        }
+        if (this.progressionGroup) {
+            this.progressionGroup.visible = true;
         }
 
         console.log('=== GAME START ===');
@@ -225,15 +228,23 @@ class MultiplayerGame {
         const myLane = this.playerPaths[myLaneIndex];
 
         if (myLane) {
+            console.log('=== CREATE OBSTACLES ===');
+            console.log('Ma ligne:', myLaneIndex);
+            console.log('Y de ma ligne:', myLane.pathLine.userData.laneY);
+
             this.obstacles.forEach(obstacle => {
                 const obstacleMesh = this.createObstacleMesh(obstacle.key);
                 const obstacleX = (obstacle.wordPosition / this.totalWords) * 80; // 80 = maxDistance
                 obstacleMesh.position.x = obstacleX;
-                obstacleMesh.position.y = myLane.pathLine.position.y;
+                obstacleMesh.position.y = myLane.pathLine.userData.laneY; // CORRIGER: utiliser userData.laneY
                 obstacleMesh.position.z = 0;
                 this.progressionGroup.add(obstacleMesh);
                 obstacle.mesh = obstacleMesh;
+
+                console.log(`Obstacle au mot ${obstacle.wordPosition}: X=${obstacleX}, Y=${myLane.pathLine.userData.laneY}, key=${obstacle.key}`);
             });
+
+            console.log('=== FIN CREATE OBSTACLES ===');
         }
     }
 
@@ -721,6 +732,7 @@ class MultiplayerGame {
         this.bombUI3D = this.createBombForUI();
         this.bombUI3D.position.set(7, 4, 20); // Position rapprochée du mot
         this.bombUI3D.scale.setScalar(1.2); // Taille réduite
+        this.bombUI3D.visible = false; // CACHER par défaut, on l'affichera au startGame()
         this.scene.add(this.bombUI3D);
     }
 
@@ -797,6 +809,7 @@ class MultiplayerGame {
         this.progressionGroup = new THREE.Group();
         this.progressionGroup.position.z = 10;
         this.progressionGroup.position.y = -5;
+        this.progressionGroup.visible = false; // CACHER pendant le lobby
 
         // Créer 4 lignes de chemin (une par joueur)
         // Lane 0 = EN BAS (Y=-6), Lane 3 = EN HAUT (Y=+6)
