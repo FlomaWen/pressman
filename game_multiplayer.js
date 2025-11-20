@@ -9,6 +9,7 @@ class MultiplayerGame {
         this.typedText = '';
         this.wordsCompleted = 0;
         this.totalWords = 40;
+        this.isReady = false;
 
         // Stats
         this.startTime = null;
@@ -53,10 +54,31 @@ class MultiplayerGame {
         // Configurer les événements WebSocket
         this.setupSocketEvents();
 
+        // Configurer le bouton PRÊT
+        this.setupReadyButton();
+
         // Initialiser la scène 3D
         this.setupScene();
         this.setupProgressionPath();
         this.animate();
+    }
+
+    setupReadyButton() {
+        const readyButton = document.getElementById('ready-button');
+        readyButton.addEventListener('click', () => {
+            this.isReady = !this.isReady;
+
+            if (this.isReady) {
+                readyButton.textContent = '✗ PAS PRÊT';
+                readyButton.classList.add('ready');
+            } else {
+                readyButton.textContent = '✓ JE SUIS PRÊT';
+                readyButton.classList.remove('ready');
+            }
+
+            // Envoyer le statut au serveur
+            this.socket.emit('player_ready', this.isReady);
+        });
     }
 
     setupSocketEvents() {
@@ -65,6 +87,18 @@ class MultiplayerGame {
             this.gameState = gameState;
             this.updateWaitingRoom(gameState);
             this.updatePlayersStatus(gameState);
+        });
+
+        // Compte à rebours commence
+        this.socket.on('countdown_start', (seconds) => {
+            document.getElementById('countdown').textContent = seconds;
+            document.getElementById('ready-button').disabled = true;
+            document.getElementById('waiting-info').textContent = '🚀 La partie va commencer !';
+        });
+
+        // Mise à jour du compte à rebours
+        this.socket.on('countdown_update', (seconds) => {
+            document.getElementById('countdown').textContent = seconds;
         });
 
         // Début de la partie
@@ -89,12 +123,34 @@ class MultiplayerGame {
         if (gameState.status !== 'waiting') return;
 
         const playersList = document.getElementById('players-waiting');
-        playersList.innerHTML = gameState.players.map(p =>
-            `<div class="player-item">👤 ${p.name}</div>`
-        ).join('');
+        playersList.innerHTML = gameState.players.map(p => {
+            const readyClass = p.ready ? 'ready' : 'not-ready';
+            const statusClass = p.ready ? 'ready' : 'waiting';
+            const statusText = p.ready ? '✓ PRÊT' : '⏳ En attente...';
 
-        const waitingText = document.querySelector('#waiting-room p');
-        waitingText.textContent = `${gameState.players.length}/${4} joueurs connectés`;
+            return `
+                <div class="player-item ${readyClass}">
+                    <span class="player-name">👤 ${p.name}</span>
+                    <span class="player-status ${statusClass}">${statusText}</span>
+                </div>
+            `;
+        }).join('');
+
+        const lobbyStatus = document.getElementById('lobby-status');
+        lobbyStatus.textContent = `${gameState.players.length}/${4} joueurs connectés`;
+
+        // Mise à jour du texte d'information
+        const readyCount = gameState.players.filter(p => p.ready).length;
+        const totalPlayers = gameState.players.length;
+        const waitingInfo = document.getElementById('waiting-info');
+
+        if (totalPlayers < 2) {
+            waitingInfo.textContent = '⏳ En attente d\'au moins 2 joueurs...';
+        } else if (readyCount < totalPlayers) {
+            waitingInfo.textContent = `${readyCount}/${totalPlayers} joueurs prêts`;
+        } else {
+            waitingInfo.textContent = '';
+        }
     }
 
     startGame() {
@@ -246,6 +302,22 @@ class MultiplayerGame {
                 </div>
             `;
         }).join('');
+
+        // Compte à rebours avant retour au menu
+        let countdown = 10;
+        const countdownElement = document.getElementById('return-countdown');
+
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdownElement) {
+                countdownElement.textContent = countdown;
+            }
+
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                location.reload();
+            }
+        }, 1000);
     }
 
     setupScene() {

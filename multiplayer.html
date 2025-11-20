@@ -101,12 +101,13 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.9);
             padding: 40px;
             border-radius: 20px;
             text-align: center;
             color: white;
-            min-width: 400px;
+            min-width: 500px;
+            max-width: 600px;
         }
 
         #waiting-room h2 {
@@ -122,16 +123,83 @@
 
         #waiting-room .player-item {
             background: rgba(255, 255, 255, 0.1);
-            padding: 10px;
+            padding: 15px;
             margin: 10px 0;
             border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        #waiting-room .player-item.ready {
+            background: rgba(0, 255, 0, 0.2);
+            border: 2px solid #00ff00;
+        }
+
+        #waiting-room .player-item.not-ready {
+            background: rgba(255, 255, 0, 0.1);
+            border: 2px solid #ffaa00;
+        }
+
+        #waiting-room .player-name {
+            font-weight: bold;
+            font-size: 22px;
+        }
+
+        #waiting-room .player-status {
+            font-size: 18px;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+
+        #waiting-room .player-status.ready {
+            background: #00ff00;
+            color: #000;
+        }
+
+        #waiting-room .player-status.waiting {
+            background: #ffaa00;
+            color: #000;
+        }
+
+        #ready-button {
+            margin-top: 30px;
+            padding: 20px 50px;
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #00ff00, #00aa00);
+            color: #000;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            pointer-events: auto;
+        }
+
+        #ready-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
+        }
+
+        #ready-button.ready {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+        }
+
+        #waiting-info {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #ffaa00;
+            font-style: italic;
         }
 
         #countdown {
-            font-size: 72px;
+            font-size: 120px;
             color: #ff0000;
-            margin-top: 20px;
+            margin-top: 30px;
             animation: pulse 1s infinite;
+            text-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
         }
 
         @keyframes pulse {
@@ -327,9 +395,11 @@
         <div id="ui-overlay">
             <!-- Salle d'attente -->
             <div id="waiting-room">
-                <h2>⏳ Salle d'attente</h2>
-                <p>En attente d'autres joueurs...</p>
+                <h2>🎮 LOBBY</h2>
+                <p id="lobby-status">En attente d'autres joueurs...</p>
                 <div class="players-list" id="players-waiting"></div>
+                <button id="ready-button">✓ JE SUIS PRÊT</button>
+                <div id="waiting-info"></div>
                 <div id="countdown"></div>
             </div>
 
@@ -356,8 +426,11 @@
             <div id="leaderboard">
                 <h2>🏆 CLASSEMENT FINAL</h2>
                 <div id="leaderboard-list"></div>
-                <button onclick="location.reload()" style="margin-top: 30px; padding: 15px 30px; font-size: 18px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold;">
-                    REJOUER
+                <p style="margin-top: 20px; color: #ffaa00; font-size: 18px;">
+                    ⏰ Retour au menu dans <span id="return-countdown">10</span> secondes...
+                </p>
+                <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 30px; font-size: 18px; background: #667eea; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold;">
+                    🔄 RETOUR AU MENU
                 </button>
             </div>
         </div>

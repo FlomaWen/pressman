@@ -37,10 +37,24 @@ class Game {
 
     addPlayer(player) {
         if (this.players.length < this.maxPlayers && this.status === 'waiting') {
+            player.ready = false; // Pas prêt par défaut
             this.players.push(player);
             return true;
         }
         return false;
+    }
+
+    setPlayerReady(socketId, ready) {
+        const player = this.players.find(p => p.socketId === socketId);
+        if (player) {
+            player.ready = ready;
+            return true;
+        }
+        return false;
+    }
+
+    allPlayersReady() {
+        return this.players.length >= 2 && this.players.every(p => p.ready);
     }
 
     removePlayer(socketId) {
@@ -48,7 +62,7 @@ class Game {
     }
 
     canStart() {
-        return this.players.length >= 2 && this.status === 'waiting';
+        return this.allPlayersReady() && this.status === 'waiting';
     }
 
     start(wordsList) {
@@ -66,6 +80,7 @@ class Game {
             player.wpm = 0;
             player.finished = false;
             player.finishTime = null;
+            player.ready = false; // Reset ready pour la prochaine partie
         });
     }
 
@@ -107,6 +122,7 @@ class Game {
             status: this.status,
             players: this.players.map(p => ({
                 name: p.name,
+                ready: p.ready || false,
                 wordsCompleted: p.wordsCompleted || 0,
                 wpm: p.wpm || 0,
                 finished: p.finished || false
@@ -181,19 +197,44 @@ io.on('connection', (socket) => {
             io.to(game.id).emit('game_update', game.getGameState());
 
             console.log(`${playerName} a rejoint la partie ${game.id} (${game.players.length}/${game.maxPlayers})`);
-
-            // Si assez de joueurs, démarrer le compte à rebours
-            if (game.canStart()) {
-                setTimeout(() => {
-                    if (game.status === 'waiting') {
-                        game.start(WORDS);
-                        io.to(game.id).emit('game_start', game.getGameState());
-                        console.log(`Partie ${game.id} démarrée !`);
-                    }
-                }, 3000); // 3 secondes de délai
-            }
         } else {
             socket.emit('error', 'Impossible de rejoindre la partie');
+        }
+    });
+
+    // Joueur marque qu'il est prêt
+    socket.on('player_ready', (ready) => {
+        const playerData = players.get(socket.id);
+        if (playerData) {
+            const game = games.get(playerData.gameId);
+            if (game && game.status === 'waiting') {
+                game.setPlayerReady(socket.id, ready);
+
+                // Notifier tous les joueurs
+                io.to(game.id).emit('game_update', game.getGameState());
+
+                console.log(`${playerData.player.name} est ${ready ? 'prêt' : 'pas prêt'}`);
+
+                // Si tous les joueurs sont prêts, démarrer après un compte à rebours
+                if (game.canStart()) {
+                    io.to(game.id).emit('countdown_start', 3);
+
+                    let countdown = 3;
+                    const countdownInterval = setInterval(() => {
+                        countdown--;
+                        if (countdown > 0) {
+                            io.to(game.id).emit('countdown_update', countdown);
+                        } else {
+                            clearInterval(countdownInterval);
+                            if (game.status === 'waiting' && game.canStart()) {
+                                game.start(WORDS);
+                                io.to(game.id).emit('game_start', game.getGameState());
+                                console.log(`Partie ${game.id} démarrée !`);
+                            }
+                        }
+                    }, 1000);
+                }
+            }
         }
     });
 
