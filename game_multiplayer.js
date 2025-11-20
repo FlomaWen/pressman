@@ -8,6 +8,9 @@ const ERROR_MESSAGES = [
     "PITOYABLE !", "NOOOON !", "AÏE AÏE AÏE", "C'EST NUL"
 ];
 
+// Touches possibles pour les obstacles
+const OBSTACLE_KEYS = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
+
 class MultiplayerGame {
     constructor() {
         this.socket = io();
@@ -32,6 +35,13 @@ class MultiplayerGame {
         this.bombStartTime = Date.now();
         this.errorCount = 0;
         this.maxErrors = 2;
+
+        // Obstacles system
+        this.obstacles = []; // Obstacles sur la ligne du joueur
+        this.currentObstacle = null; // Obstacle actuel à éviter
+        this.obstacleKeyToPress = ''; // Touche à appuyer pour sauter
+        this.isJumping = false; // Pour l'animation de saut
+        this.obstacleUIVisible = false; // Flag pour savoir si l'UI de l'obstacle est visible
 
         this.setupLoginScreen();
     }
@@ -186,8 +196,86 @@ class MultiplayerGame {
         // Assigner les joueurs aux lignes
         this.assignPlayersToLanes();
 
+        // Créer les obstacles pour le joueur local (APRÈS avoir assigné les lignes)
+        this.createObstacles();
+
         this.updateWordDisplay();
         this.setupEventListeners();
+    }
+
+    createObstacles() {
+        // Créer des obstacles tous les 5 mots
+        this.obstacles = [];
+        for (let i = 5; i <= this.totalWords; i += 5) {
+            const randomKey = OBSTACLE_KEYS[Math.floor(Math.random() * OBSTACLE_KEYS.length)];
+            this.obstacles.push({
+                wordPosition: i,
+                key: randomKey,
+                passed: false,
+                mesh: null
+            });
+        }
+
+        // Le joueur local est TOUJOURS sur la ligne 3 (dernière ligne = en bas)
+        const myLaneIndex = 3;
+        const myLane = this.playerPaths[myLaneIndex];
+
+        if (myLane) {
+            this.obstacles.forEach(obstacle => {
+                const obstacleMesh = this.createObstacleMesh(obstacle.key);
+                const obstacleX = (obstacle.wordPosition / this.totalWords) * 80; // 80 = maxDistance
+                obstacleMesh.position.x = obstacleX;
+                obstacleMesh.position.y = myLane.pathLine.position.y;
+                obstacleMesh.position.z = 0;
+                this.progressionGroup.add(obstacleMesh);
+                obstacle.mesh = obstacleMesh;
+            });
+        }
+    }
+
+    createObstacleMesh(key) {
+        const group = new THREE.Group();
+
+        // Bombe obstacle (plus petite)
+        const bombGroup = this.createBomb(0xff0000);
+        bombGroup.scale.setScalar(0.6);
+        group.add(bombGroup);
+
+        // Créer un canvas pour afficher la touche
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+
+        // Fond transparent
+        ctx.clearRect(0, 0, 128, 128);
+
+        // Cercle de fond
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+        ctx.beginPath();
+        ctx.arc(64, 64, 50, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Texte de la touche
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 60px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(key, 64, 64);
+
+        // Créer une texture à partir du canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(2, 2, 1);
+        sprite.position.y = 2; // Au-dessus de la bombe
+        group.add(sprite);
+
+        group.userData.key = key;
+        group.userData.bombGroup = bombGroup;
+        group.userData.sprite = sprite;
+
+        return group;
     }
 
     setupEventListeners() {
@@ -197,6 +285,39 @@ class MultiplayerGame {
     handleKeyPress(event) {
         if (!this.gameState || this.gameState.status !== 'playing') return;
 
+        // Vérifier si on doit gérer un obstacle
+        if (this.currentObstacle && !this.currentObstacle.passed) {
+            if (event.key.toUpperCase() === this.currentObstacle.key) {
+                // Obstacle réussi !
+                this.currentObstacle.passed = true;
+                if (this.currentObstacle.mesh) {
+                    this.currentObstacle.mesh.visible = false;
+                }
+
+                // Hide obstacle UI immediately and clear obstacle timing state
+                this.hideObstacleUI();
+                this.currentObstacle = null;
+                this.obstacleActive = false;
+                this.obstacleStartTime = null;
+                this.obstacleDuration = 0;
+
+                this.isJumping = true; // Déclencher l'animation de saut
+
+                // Réinitialiser la bombe : remettre le timer à 3s
+                this.bombStartTime = Date.now();
+                this.bombPaused = false;
+
+                // Afficher un message de succès (petit)
+                this.showSuccessMessage('✓ OBSTACLE ÉVITÉ !');
+
+                setTimeout(() => {
+                    this.isJumping = false;
+                }, 500);
+                return;
+            }
+        }
+
+        // Gestion normale des touches pour les mots
         if (event.key === 'Backspace') {
             this.typedText = this.typedText.slice(0, -1);
             this.updateWordDisplay();
@@ -220,6 +341,9 @@ class MultiplayerGame {
                     this.currentWordIndex++;
                     this.typedText = '';
                     this.errorCount = 0; // Reset erreurs
+
+                    // Vérifier si on arrive sur un obstacle
+                    this.checkForObstacle();
 
                     // Vérifier si c'est le dernier mot
                     if (this.wordsCompleted >= this.totalWords) {
@@ -261,12 +385,153 @@ class MultiplayerGame {
         }
     }
 
+    checkForObstacle() {
+        // Vérifier si le prochain mot correspond à un obstacle
+        const nextObstacle = this.obstacles.find(
+            obs => obs.wordPosition === this.wordsCompleted && !obs.passed
+        );
+
+        if (nextObstacle) {
+            this.currentObstacle = nextObstacle;
+            this.obstacleKeyToPress = nextObstacle.key;
+
+            // Pause la bombe : sauvegarder le temps restant
+            const elapsedBomb = Date.now() - this.bombStartTime;
+            this.bombRemaining = Math.max(0, this.bombMaxTime - elapsedBomb);
+            this.bombPaused = true;
+
+            // Définir le timer d'obstacle (2 secondes)
+            this.obstacleStartTime = Date.now();
+            this.obstacleDuration = 2000; // ms
+            this.obstacleActive = true;
+
+            // Afficher l'UI de l'obstacle (compact) uniquement si actif
+            this.showObstacleUI(nextObstacle.key);
+        }
+    }
+
+    showObstacleUI(key) {
+        // Only show when obstacleActive is true
+        if (!this.obstacleActive) return;
+
+        // Prevent duplicate UI
+        if (this.obstacleUIVisible) {
+            // update countdown text and return
+            const countdownEl = document.getElementById('obstacle-countdown');
+            if (countdownEl) countdownEl.textContent = '2.0s';
+            return;
+        }
+
+        let obstacleUIElement = document.getElementById('obstacle-ui');
+        if (!obstacleUIElement) {
+            // Créer une UI compacte et non intrusive
+            const div = document.createElement('div');
+            div.id = 'obstacle-ui';
+            div.style.cssText = `
+                position: fixed;
+                top: 28%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(255, 60, 60, 0.85);
+                color: white;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                z-index: 1200;
+                text-align: center;
+                border: 2px solid rgba(255,255,255,0.08);
+                box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+            `;
+            document.body.appendChild(div);
+            obstacleUIElement = div;
+        }
+
+        // Afficher message compact et un petit compteur qui sera mis à jour par updateObstacleTimer()
+        obstacleUIElement.innerHTML = `Attention obstacle ! <span id="obstacle-countdown" style="margin-left:8px; font-size:14px; color:#ffff00;">2.0s</span>`;
+        obstacleUIElement.style.display = 'block';
+        this.obstacleUIVisible = true;
+    }
+
+    hideObstacleUI() {
+        // Remove all matching nodes to avoid leftover UI
+        const nodes = Array.from(document.querySelectorAll('#obstacle-ui'));
+        nodes.forEach(n => {
+            try { n.remove(); } catch (e) { n.style.display = 'none'; }
+        });
+
+        // also remove success element
+        const successNodes = Array.from(document.querySelectorAll('#obstacle-success'));
+        successNodes.forEach(n => {
+            if (n._timeout) clearTimeout(n._timeout);
+            try { n.remove(); } catch (e) { n.style.display = 'none'; }
+        });
+
+        // Reset internal flags
+        this.obstacleUIVisible = false;
+        this.obstacleActive = false;
+    }
+
+    // Called when the player fails the obstacle timer
+    handleObstacleFail() {
+        // Mark obstacle as passed (failed) and remove mesh
+        if (this.currentObstacle) {
+            this.currentObstacle.passed = true;
+            if (this.currentObstacle.mesh) this.currentObstacle.mesh.visible = false;
+        }
+
+        // Penalité : perdre 2 mots
+        this.wordsCompleted = Math.max(0, this.wordsCompleted - 2);
+        this.currentWordIndex = this.wordsCompleted;
+
+        // Envoyer mise à jour au serveur
+        this.socket.emit('player_progress', {
+            wordsCompleted: this.wordsCompleted,
+            wpm: this.currentWPM
+        });
+
+        // Afficher petit message d'échec
+        this.showErrorMessage(); // réutilise message aléatoire court
+
+        // Réinitialiser l'état obstacle
+        this.currentObstacle = null;
+        this.obstacleActive = false;
+        this.hideObstacleUI();
+
+        // Réinitialiser la bombe (on lui redonne un nouveau temps complet)
+        this.bombStartTime = Date.now();
+        this.bombPaused = false;
+    }
+
+    updateObstacleTimer() {
+        // If no current obstacle or not active, ensure UI is hidden
+        if (!this.currentObstacle || !this.obstacleActive) {
+            if (this.obstacleUIVisible) this.hideObstacleUI();
+            return;
+        }
+
+        const elapsed = Date.now() - this.obstacleStartTime;
+        const remainingMs = Math.max(0, this.obstacleDuration - elapsed);
+        const remaining = (remainingMs / 1000).toFixed(1);
+
+        const countdownEl = document.getElementById('obstacle-countdown');
+        if (countdownEl) countdownEl.textContent = `${remaining}s`;
+
+        // Si le timer se termine => échec
+        if (elapsed >= this.obstacleDuration) {
+            this.handleObstacleFail();
+        }
+    }
+
     updateWordDisplay() {
         const wordDisplay = document.getElementById('word-display');
         if (!this.gameState || this.currentWordIndex >= this.gameState.currentWords.length) {
             wordDisplay.textContent = '✅ TERMINÉ !';
             return;
         }
+
+        // We no longer show a large in-word obstacle message here.
+        // The compact obstacle UI (created by showObstacleUI) handles the warning.
 
         const currentWord = this.gameState.currentWords[this.currentWordIndex];
         let displayText = '';
@@ -301,7 +566,17 @@ class MultiplayerGame {
     updateBombTimer() {
         const bombTimerUI = document.getElementById('bomb-timer-ui');
 
-        if (bombTimerUI && this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
+        if (!bombTimerUI) return;
+
+        // Si la bombe est en pause (obstacle actif), afficher le temps restant sauvegardé
+        if (this.bombPaused) {
+            const remaining = (this.bombRemaining / 1000).toFixed(1);
+            bombTimerUI.textContent = `${remaining}s`;
+            bombTimerUI.style.color = '#888888'; // couleur grisée pour indiquer pause
+            return;
+        }
+
+        if (this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
             const elapsed = Date.now() - this.bombStartTime;
             const remaining = Math.max(0, (this.bombMaxTime - elapsed) / 1000);
             bombTimerUI.textContent = `${remaining.toFixed(1)}s`;
@@ -314,7 +589,7 @@ class MultiplayerGame {
             } else {
                 bombTimerUI.style.color = '#ffaa00';
             }
-        } else if (bombTimerUI && this.hasFinished) {
+        } else if (this.hasFinished) {
             bombTimerUI.textContent = '✓ TERMINÉ';
             bombTimerUI.style.color = '#00ff00';
         }
@@ -440,7 +715,7 @@ class MultiplayerGame {
     setupBombUI() {
         // Créer une bombe 3D fixe pour l'UI (à côté du mot)
         this.bombUI3D = this.createBombForUI();
-        this.bombUI3D.position.set(8, 5, 20); // Position rapprochée du mot
+        this.bombUI3D.position.set(7, 4, 20); // Position rapprochée du mot
         this.bombUI3D.scale.setScalar(1.2); // Taille réduite
         this.scene.add(this.bombUI3D);
     }
@@ -628,9 +903,9 @@ class MultiplayerGame {
         const scale = 0.8; // Plus petit
 
         // Corps de la bombe
-        const bombGeometry = new THREE.SphereGeometry(1 * scale, 16, 16);
+        const bombGeometry = new THREE.SphereGeometry(1 * scale, 8, 8);
         const bombMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a1a1a,
+            color: color,
             roughness: 0.3,
             metalness: 0.8
         });
@@ -671,36 +946,42 @@ class MultiplayerGame {
     assignPlayersToLanes() {
         if (!this.gameState || !this.gameState.players) return;
 
-        // Trouver l'index du joueur local dans la liste des joueurs
-        const myPlayerIndex = this.gameState.players.findIndex(p => p.name === this.playerName);
+        // Réorganiser pour que le joueur local soit toujours sur la ligne du bas (index 3)
+        // et les autres joueurs sur les lignes 0, 1, 2
+        const allPlayers = this.gameState.players;
 
-        // Réorganiser les joueurs pour que le joueur local soit en premier
-        const reorderedPlayers = [];
-        if (myPlayerIndex >= 0) {
-            reorderedPlayers.push(this.gameState.players[myPlayerIndex]); // Joueur local en premier
+        // Trouver le joueur local
+        const localPlayerData = allPlayers.find(p => p.name === this.playerName);
 
-            // Ajouter les autres joueurs
-            this.gameState.players.forEach((player, index) => {
-                if (index !== myPlayerIndex) {
-                    reorderedPlayers.push(player);
-                }
-            });
-        } else {
-            // Si on ne trouve pas le joueur local, utiliser l'ordre normal
-            reorderedPlayers.push(...this.gameState.players);
+        // Autres joueurs (excluant le joueur local)
+        const otherPlayers = allPlayers.filter(p => p.name !== this.playerName);
+
+        // Créer l'assignation des lignes : lignes 0-2 = autres, ligne 3 = joueur local
+        const laneAssignments = [];
+
+        // Remplir les 3 premières lignes avec les autres joueurs
+        for (let i = 0; i < 3; i++) {
+            laneAssignments[i] = otherPlayers[i] || null;
         }
 
-        reorderedPlayers.forEach((player, laneIndex) => {
-            if (laneIndex < 4 && this.playerPaths[laneIndex]) {
-                const lane = this.playerPaths[laneIndex];
-                lane.playerName = player.name;
+        // Ligne 3 = joueur local
+        laneAssignments[3] = localPlayerData || null;
+
+        // Appliquer l'assignation aux lignes 3D
+        laneAssignments.forEach((playerData, laneIndex) => {
+            const lane = this.playerPaths[laneIndex];
+            if (!lane) return;
+
+            if (playerData) {
+                lane.playerName = playerData.name;
                 lane.character.visible = true;
-
-                // Afficher les points pour cette ligne
                 lane.dots.forEach(dot => dot.visible = true);
-
-                // Mettre à jour la progression
-                lane.character.userData.targetProgress = (player.wordsCompleted / this.totalWords) * 100;
+                lane.character.userData.targetProgress = (playerData.wordsCompleted / this.totalWords) * 100;
+            } else {
+                lane.playerName = null;
+                lane.character.visible = false;
+                lane.dots.forEach(dot => dot.visible = false);
+                lane.character.userData.targetProgress = 0;
             }
         });
     }
@@ -716,6 +997,42 @@ class MultiplayerGame {
                 errorMessage.style.display = 'none';
             }, 1000);
         }
+    }
+
+    // Message de succès compact (vert), utilisé pour indiquer un obstacle évité
+    showSuccessMessage(text) {
+        let successEl = document.getElementById('obstacle-success');
+        if (!successEl) {
+            const div = document.createElement('div');
+            div.id = 'obstacle-success';
+            div.style.cssText = `
+                position: fixed;
+                top: 32%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(40, 200, 40, 0.9);
+                color: white;
+                padding: 6px 12px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 700;
+                z-index: 1210;
+                text-align: center;
+                border: 2px solid rgba(255,255,255,0.06);
+                box-shadow: 0 6px 12px rgba(0,0,0,0.35);
+            `;
+            document.body.appendChild(div);
+            successEl = div;
+        }
+
+        successEl.textContent = text;
+        successEl.style.display = 'block';
+
+        // Disparition rapide
+        clearTimeout(successEl._timeout);
+        successEl._timeout = setTimeout(() => {
+            successEl.style.display = 'none';
+        }, 900);
     }
 
     makePlayerJumpBack() {
@@ -788,13 +1105,30 @@ class MultiplayerGame {
             this.bombUI3D.visible = false;
         }
 
+        // Animer les obstacles
+        if (this.obstacles) {
+            this.obstacles.forEach(obstacle => {
+                if (obstacle.mesh && !obstacle.passed) {
+                    // Rotation de la bombe
+                    obstacle.mesh.userData.bombGroup.rotation.y = time * 2;
+
+                    // Pulsation du sprite
+                    const scale = 2 + Math.sin(time * 5) * 0.2;
+                    obstacle.mesh.userData.sprite.scale.set(scale, scale, 1);
+
+                    // Animation de l'étincelle
+                    obstacle.mesh.userData.bombGroup.userData.spark.scale.setScalar(1 + Math.sin(time * 10) * 0.3);
+                }
+            });
+        }
+
         // Animation du système de progression
         if (this.progressionGroup && this.playerPaths) {
             const lerpSpeed = 0.05;
-            // Le joueur local est toujours sur la première ligne (index 0)
-            const myLaneIndex = 0;
+            // Le joueur local est TOUJOURS sur la ligne 3 (dernière ligne)
+            const myLaneIndex = 3;
 
-            // Animer chaque personnage et bombe
+            // Animer chaque personnage
             this.playerPaths.forEach((lane, index) => {
                 if (lane.character.visible) {
                     // Calculer la position X basée sur la progression (0-100%)
@@ -806,16 +1140,23 @@ class MultiplayerGame {
                     lane.character.userData.progress += (targetX - currentX) * lerpSpeed;
                     lane.character.position.x = lane.character.userData.progress;
 
+                    // Animation de saut pour le joueur local
+                    if (index === myLaneIndex && this.isJumping) {
+                        const jumpHeight = Math.sin(time * 20) * 2;
+                        lane.character.position.y = lane.pathLine.position.y + Math.abs(jumpHeight);
+                    } else {
+                        lane.character.position.y = lane.pathLine.position.y;
+                    }
 
                     // Animer les points de cette ligne
-                    lane.dots.forEach((dot, index) => {
-                        dot.material.emissiveIntensity = 0.5 + Math.sin(time * 2 + index * 0.5) * 0.3;
+                    lane.dots.forEach((dot, dotIndex) => {
+                        dot.material.emissiveIntensity = 0.5 + Math.sin(time * 2 + dotIndex * 0.5) * 0.3;
                     });
                 }
             });
 
-            // Faire suivre la caméra au joueur local
-            if (myLaneIndex >= 0 && this.playerPaths[myLaneIndex]) {
+            // Faire suivre la caméra au joueur local (ligne 3)
+            if (this.playerPaths[myLaneIndex]) {
                 const myCharacter = this.playerPaths[myLaneIndex].character;
                 const targetCameraX = myCharacter.position.x;
 
@@ -826,6 +1167,8 @@ class MultiplayerGame {
 
             // Mettre à jour le timer de la bombe
             this.updateBombTimer();
+            // Mettre à jour le timer d'obstacle (si actif)
+            this.updateObstacleTimer();
         }
 
         this.renderer.render(this.scene, this.camera);
@@ -834,4 +1177,3 @@ class MultiplayerGame {
 
 // Démarrer le jeu
 new MultiplayerGame();
-
