@@ -202,12 +202,18 @@
             text-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
         }
 
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.2); }
+        @keyframes comboFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
         }
 
-        #game-ui {
+        @keyframes shake {
+            0%, 100% { transform: translateX(-50%) rotate(0deg); }
+            25% { transform: translateX(-50%) rotate(-5deg); }
+            75% { transform: translateX(-50%) rotate(5deg); }
+        }
+
+        #accuracy {
             display: none;
         }
 
@@ -421,6 +427,9 @@
                     <div>🎯 Mots: <span id="words-count">0/40</span></div>
                     <div>❌ Erreurs: <span id="error-count">0/2</span></div>
                     <div>💣 Temps: <span id="bomb-timer">10.0s</span></div>
+                </div>
+
+                <div id="error-message-multi" style="display: none; position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%); font-size: 48px; color: #ff0000; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); animation: shake 0.5s;">
                 </div>
             </div>
 

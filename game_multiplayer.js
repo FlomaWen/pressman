@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 
+// Messages d'erreur
+const ERROR_MESSAGES = [
+    "T NAZE", "VA VOIR AILLEURS", "C'EST PAS ÇA !", "T'ES AVEUGLE ?",
+    "RATÉ !", "ESSAIE ENCORE", "NON MAIS SÉRIEUX ?", "TU PEUX MIEUX FAIRE",
+    "MAUVAISE TOUCHE !", "CONCENTRE-TOI !", "RECOMMENCE !", "ÉCHEC TOTAL",
+    "PITOYABLE !", "NOOOON !", "AÏE AÏE AÏE", "C'EST NUL"
+];
+
 class MultiplayerGame {
     constructor() {
         this.socket = io();
@@ -10,9 +18,11 @@ class MultiplayerGame {
         this.wordsCompleted = 0;
         this.totalWords = 40;
         this.isReady = false;
+        this.hasFinished = false; // Nouveau flag pour savoir si on a terminé
 
         // Stats
         this.startTime = null;
+        this.finishTime = null; // Temps de fin
         this.currentWPM = 0;
         this.totalKeystrokes = 0;
         this.correctKeystrokes = 0;
@@ -205,7 +215,14 @@ class MultiplayerGame {
                     this.currentWordIndex++;
                     this.typedText = '';
                     this.errorCount = 0; // Reset erreurs
-                    this.bombStartTime = Date.now(); // Reset timer bombe
+
+                    // Vérifier si c'est le dernier mot
+                    if (this.wordsCompleted >= this.totalWords) {
+                        this.hasFinished = true;
+                        this.finishTime = Date.now();
+                    } else {
+                        this.bombStartTime = Date.now(); // Reset timer bombe seulement si pas fini
+                    }
 
                     this.updateWPM();
                     this.updateProgress();
@@ -224,6 +241,9 @@ class MultiplayerGame {
                 // Erreur
                 this.typedText = '';
                 this.errorCount++;
+
+                // Afficher un message d'erreur
+                this.showErrorMessage();
 
                 if (this.errorCount >= this.maxErrors) {
                     // 2 erreurs = retour en arrière
@@ -275,16 +295,22 @@ class MultiplayerGame {
 
     updateBombTimer() {
         const bombTimer = document.getElementById('bomb-timer');
-        if (bombTimer && this.gameState && this.gameState.status === 'playing') {
+        if (bombTimer && this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
             const elapsed = Date.now() - this.bombStartTime;
             const remaining = Math.max(0, (this.bombMaxTime - elapsed) / 1000);
             bombTimer.textContent = `${remaining.toFixed(1)}s`;
             bombTimer.style.color = remaining < 3 ? '#ff0000' : remaining < 5 ? '#ffaa00' : '#00ff00';
+        } else if (bombTimer && this.hasFinished) {
+            bombTimer.textContent = '✓ TERMINÉ';
+            bombTimer.style.color = '#00ff00';
         }
     }
 
     updateWPM() {
-        const elapsedMinutes = (Date.now() - this.startTime) / 60000;
+        // Utiliser finishTime si le joueur a terminé, sinon Date.now()
+        const endTime = this.hasFinished ? this.finishTime : Date.now();
+        const elapsedMinutes = (endTime - this.startTime) / 60000;
+
         if (elapsedMinutes > 0) {
             this.currentWPM = Math.round(this.wordsCompleted / elapsedMinutes);
             document.getElementById('wpm').textContent = this.currentWPM;
@@ -575,6 +601,19 @@ class MultiplayerGame {
         });
     }
 
+    showErrorMessage() {
+        const errorMessage = document.getElementById('error-message-multi');
+        if (errorMessage) {
+            const message = ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)];
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 1000);
+        }
+    }
+
     makePlayerJumpBack() {
         // Reculer d'un mot (2.5% de progression)
         this.wordsCompleted = Math.max(0, this.wordsCompleted - 1);
@@ -624,8 +663,8 @@ class MultiplayerGame {
                         // Positionner la bombe devant le personnage
                         lane.bomb.position.x = lane.character.position.x - 5;
 
-                        // Animer l'étincelle si c'est ma ligne
-                        if (index === myLaneIndex && this.gameState.status === 'playing') {
+                        // Animer l'étincelle si c'est ma ligne ET que je n'ai pas fini
+                        if (index === myLaneIndex && this.gameState.status === 'playing' && !this.hasFinished) {
                             const elapsed = Date.now() - this.bombStartTime;
                             const fuseProgress = Math.min(elapsed / this.bombMaxTime, 1);
 
@@ -639,6 +678,9 @@ class MultiplayerGame {
                                 this.makePlayerJumpBack();
                                 this.bombStartTime = Date.now();
                             }
+                        } else if (index === myLaneIndex && this.hasFinished) {
+                            // Éteindre l'étincelle si terminé
+                            lane.bomb.userData.spark.visible = false;
                         }
 
                         // Rotation de la bombe
