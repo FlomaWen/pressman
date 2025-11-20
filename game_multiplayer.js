@@ -162,6 +162,9 @@ class MultiplayerGame {
         this.wordsCompleted = 0;
         this.typedText = '';
 
+        // Assigner les joueurs aux lignes
+        this.assignPlayersToLanes();
+
         this.updateWordDisplay();
         this.setupEventListeners();
     }
@@ -260,13 +263,15 @@ class MultiplayerGame {
         if (gameState.status === 'waiting') return;
 
         const playersList = document.getElementById('players-list');
-        playersList.innerHTML = gameState.players.map(player => {
+        playersList.innerHTML = gameState.players.map((player, index) => {
             const percentage = (player.wordsCompleted / this.totalWords) * 100;
             const finishedClass = player.finished ? 'finished' : '';
+            const colors = ['🔴', '🟢', '🔵', '🟡'];
+            const colorIcon = colors[index] || '⚪';
 
             return `
                 <div class="player-status ${finishedClass}">
-                    <div class="name">${player.finished ? '🏆 ' : ''}${player.name}</div>
+                    <div class="name">${colorIcon} ${player.finished ? '🏆 ' : ''}${player.name}</div>
                     <div class="stats">
                         ${player.wordsCompleted}/${this.totalWords} mots | ${player.wpm} WPM
                     </div>
@@ -276,6 +281,9 @@ class MultiplayerGame {
                 </div>
             `;
         }).join('');
+
+        // Mettre à jour la visualisation 3D
+        this.assignPlayersToLanes();
     }
 
     showLeaderboard() {
@@ -356,62 +364,90 @@ class MultiplayerGame {
         this.progressionGroup.position.z = 10;
         this.progressionGroup.position.y = -10;
 
-        // Ligne du chemin
-        const pathGeometry = new THREE.BufferGeometry();
-        const pathPoints = [];
-        for (let i = 0; i < 50; i++) {
-            pathPoints.push(new THREE.Vector3(i * 3 - 75, 0, 0));
-        }
-        pathGeometry.setFromPoints(pathPoints);
-        const pathMaterial = new THREE.LineBasicMaterial({
-            color: 0xffffff,
-            linewidth: 3
-        });
-        const pathLine = new THREE.Line(pathGeometry, pathMaterial);
-        this.progressionGroup.add(pathLine);
+        // Créer 4 lignes de chemin (une par joueur)
+        this.playerPaths = [];
+        const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]; // Rouge, Vert, Bleu, Jaune
 
-        // Points de progression
-        this.progressionDots = [];
-        for (let i = 0; i < 25; i++) {
-            const dotGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-            const dotMaterial = new THREE.MeshStandardMaterial({
-                color: 0xffaa00,
-                emissive: 0xffaa00,
-                emissiveIntensity: 1.0
+        for (let lane = 0; lane < 4; lane++) {
+            const laneY = (lane - 1.5) * 4; // Espacer les lignes
+
+            // Ligne du chemin
+            const pathGeometry = new THREE.BufferGeometry();
+            const pathPoints = [];
+            for (let i = 0; i < 50; i++) {
+                pathPoints.push(new THREE.Vector3(i * 3 - 75, laneY, 0));
+            }
+            pathGeometry.setFromPoints(pathPoints);
+            const pathMaterial = new THREE.LineBasicMaterial({
+                color: colors[lane],
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.5
             });
-            const dot = new THREE.Mesh(dotGeometry, dotMaterial);
-            dot.position.x = i * 4;
-            dot.position.y = 0;
-            this.progressionGroup.add(dot);
-            this.progressionDots.push(dot);
-        }
+            const pathLine = new THREE.Line(pathGeometry, pathMaterial);
+            this.progressionGroup.add(pathLine);
 
-        // Personnage
-        this.character = this.createCharacter();
-        this.character.position.x = 0;
-        this.progressionGroup.add(this.character);
+            // Points de progression pour cette ligne
+            const dots = [];
+            for (let i = 0; i < 25; i++) {
+                const dotGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const dotMaterial = new THREE.MeshStandardMaterial({
+                    color: colors[lane],
+                    emissive: colors[lane],
+                    emissiveIntensity: 0.8
+                });
+                const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+                dot.position.x = i * 4;
+                dot.position.y = laneY;
+                dot.visible = false; // Caché par défaut
+                this.progressionGroup.add(dot);
+                dots.push(dot);
+            }
+
+            // Personnage pour cette ligne
+            const character = this.createCharacter(colors[lane]);
+            character.position.x = 0;
+            character.position.y = laneY;
+            character.visible = false; // Caché par défaut
+            character.userData.progress = 0;
+            character.userData.targetProgress = 0;
+            this.progressionGroup.add(character);
+
+            this.playerPaths.push({
+                lane: lane,
+                color: colors[lane],
+                pathLine: pathLine,
+                dots: dots,
+                character: character,
+                playerName: null
+            });
+        }
 
         this.scene.add(this.progressionGroup);
-
-        this.progressionOffset = 0;
-        this.targetProgressionOffset = 0;
-        this.totalProgress = 0;
     }
 
-    createCharacter() {
+    createCharacter(color = 0x4444ff) {
         const character = new THREE.Group();
-        const scale = 2;
+        const scale = 1.5; // Réduit pour que 4 personnages tiennent
 
         // Corps
         const bodyGeometry = new THREE.CapsuleGeometry(0.3 * scale, 0.8 * scale, 8, 16);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4444ff });
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: color,
+            metalness: 0.3,
+            roughness: 0.7
+        });
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         body.position.y = 1.2 * scale;
         character.add(body);
 
         // Tête
         const headGeometry = new THREE.SphereGeometry(0.35 * scale, 16, 16);
-        const headMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc88 });
+        const headMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffcc88,
+            metalness: 0.2,
+            roughness: 0.8
+        });
         const head = new THREE.Mesh(headGeometry, headMaterial);
         head.position.y = 2.2 * scale;
         character.add(head);
@@ -431,9 +467,27 @@ class MultiplayerGame {
         return character;
     }
 
+    assignPlayersToLanes() {
+        if (!this.gameState || !this.gameState.players) return;
+
+        this.gameState.players.forEach((player, index) => {
+            if (index < 4 && this.playerPaths[index]) {
+                const lane = this.playerPaths[index];
+                lane.playerName = player.name;
+                lane.character.visible = true;
+
+                // Afficher les points pour cette ligne
+                lane.dots.forEach(dot => dot.visible = true);
+
+                // Mettre à jour la progression
+                const progress = (player.wordsCompleted / this.totalWords) * 100;
+                lane.character.userData.targetProgress = progress;
+            }
+        });
+    }
+
     advanceCharacter() {
-        this.totalProgress += 4;
-        this.targetProgressionOffset = this.totalProgress;
+        // Cette méthode n'est plus nécessaire, la progression est gérée par assignPlayersToLanes
     }
 
     animate() {
@@ -442,20 +496,26 @@ class MultiplayerGame {
         const time = Date.now() * 0.001;
 
         // Animation du système de progression
-        if (this.progressionGroup) {
-            const lerpSpeed = 0.1;
-            this.progressionOffset += (this.targetProgressionOffset - this.progressionOffset) * lerpSpeed;
+        if (this.progressionGroup && this.playerPaths) {
+            const lerpSpeed = 0.05;
 
-            const targetCharacterX = this.progressionOffset;
-            const currentCharacterX = this.character.position.x;
-            this.character.position.x += (targetCharacterX - currentCharacterX) * lerpSpeed;
+            // Animer chaque personnage
+            this.playerPaths.forEach((lane) => {
+                if (lane.character.visible) {
+                    // Calculer la position X basée sur la progression (0-100%)
+                    const maxDistance = 80; // Distance maximale en unités 3D
+                    const targetX = (lane.character.userData.targetProgress / 100) * maxDistance;
 
-            this.progressionGroup.position.x = -this.progressionOffset;
+                    // Interpoler vers la position cible
+                    const currentX = lane.character.userData.progress;
+                    lane.character.userData.progress += (targetX - currentX) * lerpSpeed;
+                    lane.character.position.x = lane.character.userData.progress;
 
-            // Animer les points
-            this.progressionDots.forEach((dot, index) => {
-                dot.material.emissiveIntensity = 0.5 + Math.sin(time * 2 + index * 0.5) * 0.3;
-                dot.position.y = Math.sin(time * 1.5 + index * 0.3) * 0.1;
+                    // Animer les points de cette ligne
+                    lane.dots.forEach((dot, index) => {
+                        dot.material.emissiveIntensity = 0.5 + Math.sin(time * 2 + index * 0.5) * 0.3;
+                    });
+                }
             });
         }
 

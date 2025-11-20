@@ -1,93 +1,177 @@
-# Jeu des Lettres 🎮
+# 🎮 PRESSMAN - Jeu de Dactylographie Multijoueur
 
-Un jeu addictif où il faut appuyer sur les bonnes lettres du clavier avec des effets 3D de mur qui se brise !
+Un jeu de course de dactylographie en temps réel avec WebSockets et Three.js.
 
-## 🎯 Deux Versions Disponibles
+## ✨ Fonctionnalités
 
-### Version 3D avec Three.js (RECOMMANDÉE) 🌟
+### 🎯 Mode Solo
+- Bombe 3D avec mèche qui brûle (10 secondes par mot)
+- Système d'erreurs (2 erreurs = explosion)
+- Personnage 3D qui marche et saute
+- 350+ mots variés
+- Système de combo
+- Statistiques (WPM, précision)
 
-Une expérience immersive avec des effets visuels époustouflants :
-- 🧱 **Mur 3D qui se brise** à chaque bonne réponse
-- 💥 **Effet d'explosion** avec des fragments qui volent
-- ✨ **Animation élastique** pour la reconstruction du mur
-- 🎨 **Changement de couleur dynamique** après chaque explosion
-- 🌊 **Effet de vague** sur le mur au repos
-- 📸 **Tremblement de caméra** quand vous vous trompez
+### 🏁 Mode Multijoueur (2-4 joueurs)
+- **Lobby avec système "PRÊT"**
+- **4 personnages visibles simultanément** (un par joueur)
+- Course de 40 mots en temps réel
+- Synchronisation WebSocket
+- Leaderboard avec podium
+- Retour automatique au menu
 
-### Version Python avec Pygame 🐍
+## 🚀 Installation et Lancement
 
-Version classique 2D pour une expérience plus simple.
+### Prérequis
+- Node.js >= 18.0.0
+- npm >= 9.0.0
 
-## 🚀 Lancement du jeu
-
-### Version 3D (Three.js) - RECOMMANDÉE
-
-1. Lancez le serveur local :
+### Installation
 ```bash
-python server.py
+npm install
 ```
 
-2. Le jeu s'ouvrira automatiquement dans votre navigateur à `http://localhost:8000`
-
-### Version Python (Pygame)
-
-1. Installez les dépendances :
+### Démarrage
 ```bash
-pip install -r requirements.txt
+npm start
 ```
 
-2. Lancez le jeu :
-```bash
-python letter_game.py
+Puis ouvrez : **http://localhost:3000**
+
+## 📁 Structure du Projet
+
+```
+pressman/
+├── server_websocket.js      # Serveur Node.js + Socket.IO
+├── package.json              # Dépendances
+├── menu.html                 # Menu principal
+├── index.html                # Mode solo
+├── game.js                   # Logique mode solo
+├── multiplayer.html          # Mode multijoueur
+├── game_multiplayer.js       # Logique multijoueur (4 personnages)
+└── docs/
+    ├── DEPLOY_RAILWAY.md     # Guide Railway
+    ├── RAILWAY_QUICK.md      # Quick start Railway
+    └── TEST_LOBBY.md         # Guide de test
 ```
 
-## 🎮 Comment jouer
+## 🎮 Comment Jouer
 
-1. Une lettre s'affiche au centre de l'écran
-2. Appuyez sur la touche correspondante sur votre clavier
-3. **Si c'est correct** : 
-   - 💥 Le mur explose en milliers de fragments (version 3D)
-   - 🎨 Le fond change de couleur
-   - ✨ Une nouvelle lettre apparaît
-   - 📊 Votre score augmente
-4. **Si c'est incorrect** : 
-   - 💬 Un message humoristique s'affiche
-   - 📸 La caméra tremble (version 3D)
-5. Appuyez sur **ESC** pour quitter
+### Mode Solo
+1. Cliquez sur "MODE SOLO"
+2. Tapez les mots avant que la bombe explose
+3. Attention : 2 erreurs = explosion !
 
-## 💬 Messages d'erreur
+### Mode Multijoueur
+1. Cliquez sur "MODE COURSE"
+2. Entrez votre pseudo
+3. Attendez d'autres joueurs (2-4)
+4. Cliquez sur "JE SUIS PRÊT"
+5. La course démarre quand tous sont prêts !
+6. Premier à 40 mots = gagnant 🏆
 
-Le jeu affiche des messages humoristiques quand vous vous trompez :
-- "T NAZE"
-- "VA VOIR AILLEURS"
-- "C'EST PAS ÇA !"
-- "T'ES AVEUGLE ?"
-- "RATÉ !"
-- "ESSAIE ENCORE"
-- "NON MAIS SÉRIEUX ?"
-- "TU PEUX MIEUX FAIRE"
-- "MAUVAISE TOUCHE !"
-- "CONCENTRE-TOI !"
-- Et bien d'autres...
+## 🎨 Personnages
 
-## 🛠️ Technologies utilisées
+4 personnages de couleurs différentes visibles en 3D :
+- 🔴 **Rouge** - Joueur 1
+- 🟢 **Vert** - Joueur 2
+- 🔵 **Bleu** - Joueur 3
+- 🟡 **Jaune** - Joueur 4
 
-### Version 3D
-- **Three.js** - Rendu 3D dans le navigateur
-- **Vanilla JavaScript** - Logique du jeu
-- **HTML5 & CSS3** - Interface utilisateur
+Chaque personnage a sa propre ligne de course visible simultanément !
 
-### Version Python
-- **Pygame** - Bibliothèque de jeu 2D
-- **Python 3** - Langage de programmation
+## 🌐 Déploiement sur Railway
 
-## ✨ Fonctionnalités techniques
+Le projet est 100% compatible Railway !
 
-- Algorithme de contraste automatique pour la lisibilité
-- Système de particules pour l'effet d'explosion
-- Animation élastique avec easing personnalisé
-- Physique simplifiée (gravité, vélocité, rotation)
-- Responsive design pour tous les écrans
+```bash
+# Vérifier la compatibilité
+node check-railway.js
 
-Amusez-vous bien et essayez de battre votre record ! 🎉🏆
+# Déployer
+git add .
+git commit -m "update"
+git push
+```
+
+Voir **DEPLOY_RAILWAY.md** pour le guide complet.
+
+## 🔧 Configuration
+
+### Modifier le nombre de mots (Multijoueur)
+`server_websocket.js` ligne 19 :
+```javascript
+this.wordsToType = 40;
+```
+
+### Modifier le nombre de joueurs max
+`server_websocket.js` ligne 18 :
+```javascript
+this.maxPlayers = 4; // 2 à 4 joueurs
+```
+
+### Modifier le temps de la bombe (Solo)
+`game.js` :
+```javascript
+this.bombMaxTime = 10000; // millisecondes
+```
+
+## 📊 Technologies
+
+- **Backend** : Node.js, Express, Socket.IO
+- **Frontend** : HTML5, Vanilla JavaScript, Three.js
+- **3D** : Three.js pour les 4 personnages et animations
+- **Temps réel** : WebSockets (Socket.IO)
+
+## 🧪 Tests
+
+Pour tester le multijoueur localement :
+1. Ouvrez 2-4 onglets
+2. Allez sur `http://localhost:3000/multiplayer.html`
+3. Entrez des pseudos différents
+4. Cliquez sur "JE SUIS PRÊT" dans chaque onglet
+5. Regardez les 4 personnages colorés courir !
+
+Voir **TEST_LOBBY.md** pour les scénarios de test complets.
+
+## 📝 Scripts Disponibles
+
+```bash
+npm start              # Lancer le serveur
+npm run dev            # Mode développement (auto-reload)
+node check-railway.js  # Vérifier compatibilité Railway
+```
+
+## 🐛 Dépannage
+
+### Les personnages ne s'affichent pas
+- Vérifiez que vous êtes en mode multijoueur
+- Attendez que la partie commence
+- Les personnages apparaissent uniquement quand la course démarre
+
+### Le lobby n'affiche pas les joueurs
+- Rafraîchissez la page (F5)
+- Vérifiez que le serveur est bien démarré
+- Ouvrez la console (F12) pour voir les erreurs
+
+### Le leaderboard ne s'affiche pas
+- Attendez que tous les joueurs aient fini
+- Le leaderboard apparaît automatiquement à la fin
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à :
+- Ajouter de nouveaux mots
+- Améliorer les animations
+- Créer de nouveaux modes de jeu
+
+## 📄 Licence
+
+MIT License
+
+---
+
+**Développé avec ❤️ et ☕**
+
+*Version 2.0 - Mode Multijoueur avec 4 Personnages*
 
