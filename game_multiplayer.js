@@ -28,7 +28,7 @@ class MultiplayerGame {
         this.correctKeystrokes = 0;
 
         // Bomb system (local pour ce joueur)
-        this.bombMaxTime = 10000; // 10 secondes par mot
+        this.bombMaxTime = 3000; // 3 secondes par mot
         this.bombStartTime = Date.now();
         this.errorCount = 0;
         this.maxErrors = 2;
@@ -178,6 +178,11 @@ class MultiplayerGame {
         this.wordsCompleted = 0;
         this.typedText = '';
 
+        // Rendre la bombe UI visible
+        if (this.bombUI3D) {
+            this.bombUI3D.visible = true;
+        }
+
         // Assigner les joueurs aux lignes
         this.assignPlayersToLanes();
 
@@ -294,15 +299,24 @@ class MultiplayerGame {
     }
 
     updateBombTimer() {
-        const bombTimer = document.getElementById('bomb-timer');
-        if (bombTimer && this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
+        const bombTimerUI = document.getElementById('bomb-timer-ui');
+
+        if (bombTimerUI && this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
             const elapsed = Date.now() - this.bombStartTime;
             const remaining = Math.max(0, (this.bombMaxTime - elapsed) / 1000);
-            bombTimer.textContent = `${remaining.toFixed(1)}s`;
-            bombTimer.style.color = remaining < 3 ? '#ff0000' : remaining < 5 ? '#ffaa00' : '#00ff00';
-        } else if (bombTimer && this.hasFinished) {
-            bombTimer.textContent = '✓ TERMINÉ';
-            bombTimer.style.color = '#00ff00';
+            bombTimerUI.textContent = `${remaining.toFixed(1)}s`;
+
+            // Changer la couleur selon le temps restant
+            if (remaining < 1) {
+                bombTimerUI.style.color = '#ff0000';
+            } else if (remaining < 2) {
+                bombTimerUI.style.color = '#ff6600';
+            } else {
+                bombTimerUI.style.color = '#ffaa00';
+            }
+        } else if (bombTimerUI && this.hasFinished) {
+            bombTimerUI.textContent = '✓ TERMINÉ';
+            bombTimerUI.style.color = '#00ff00';
         }
     }
 
@@ -418,6 +432,63 @@ class MultiplayerGame {
 
         // Ajouter les particules de fond
         this.setupParticles();
+
+        // Créer la bombe UI en 3D
+        this.setupBombUI();
+    }
+
+    setupBombUI() {
+        // Créer une bombe 3D fixe pour l'UI (à côté du mot)
+        this.bombUI3D = this.createBombForUI();
+        this.bombUI3D.position.set(15, 5, 20); // Position fixe à droite du mot
+        this.bombUI3D.scale.setScalar(1.5); // Plus grande
+        this.scene.add(this.bombUI3D);
+    }
+
+    createBombForUI() {
+        const bombGroup = new THREE.Group();
+        const scale = 1;
+
+        // Corps de la bombe
+        const bombGeometry = new THREE.SphereGeometry(1 * scale, 16, 16);
+        const bombMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a1a,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const bombBody = new THREE.Mesh(bombGeometry, bombMaterial);
+        bombGroup.add(bombBody);
+
+        // Mèche
+        const fuseGeometry = new THREE.CylinderGeometry(0.1 * scale, 0.1 * scale, 2 * scale, 8);
+        const fuseMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
+        fuse.position.y = 1.5 * scale;
+        bombGroup.add(fuse);
+
+        // Étincelle
+        const sparkGeometry = new THREE.SphereGeometry(0.3 * scale, 8, 8);
+        const sparkMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff4500,
+            emissive: 0xff4500,
+            emissiveIntensity: 2
+        });
+        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+        spark.position.y = 2.5 * scale;
+        bombGroup.add(spark);
+
+        // Lumière
+        const sparkLight = new THREE.PointLight(0xff4500, 2, 10);
+        spark.add(sparkLight);
+
+        bombGroup.userData = {
+            spark: spark,
+            sparkLight: sparkLight,
+            body: bombBody,
+            fuse: fuse
+        };
+
+        return bombGroup;
     }
 
     setupParticles() {
@@ -446,7 +517,7 @@ class MultiplayerGame {
     setupProgressionPath() {
         this.progressionGroup = new THREE.Group();
         this.progressionGroup.position.z = 10;
-        this.progressionGroup.position.y = -10;
+        this.progressionGroup.position.y = -5; // Remonté de -10 à -5 pour ne pas être caché
 
         // Créer 4 lignes de chemin (une par joueur)
         this.playerPaths = [];
@@ -686,6 +757,48 @@ class MultiplayerGame {
         if (this.particles) {
             this.particles.rotation.y = time * 0.05;
             this.particles.rotation.x = time * 0.03;
+        }
+
+        // Animer la bombe UI 3D
+        if (this.bombUI3D && this.gameState && this.gameState.status === 'playing' && !this.hasFinished) {
+            const elapsed = Date.now() - this.bombStartTime;
+            const fuseProgress = Math.min(elapsed / this.bombMaxTime, 1);
+
+            // Rotation de la bombe
+            this.bombUI3D.rotation.y = time * 0.5;
+
+            // Déplacer l'étincelle vers le bas
+            this.bombUI3D.userData.spark.position.y = 2.5 * (1 - fuseProgress);
+            this.bombUI3D.userData.spark.scale.setScalar(1 + Math.sin(time * 20) * 0.3);
+            this.bombUI3D.userData.sparkLight.intensity = 2 + Math.sin(time * 20) * 1;
+
+            // Changer la couleur selon le temps restant
+            const remaining = (this.bombMaxTime - elapsed) / 1000;
+            if (remaining < 1) {
+                this.bombUI3D.userData.spark.material.color.setHex(0xff0000);
+                this.bombUI3D.userData.sparkLight.color.setHex(0xff0000);
+                this.bombUI3D.userData.body.material.emissive.setHex(0x330000);
+                this.bombUI3D.userData.body.material.emissiveIntensity = 0.5;
+            } else if (remaining < 2) {
+                this.bombUI3D.userData.spark.material.color.setHex(0xff6600);
+                this.bombUI3D.userData.sparkLight.color.setHex(0xff6600);
+                this.bombUI3D.userData.body.material.emissive.setHex(0x331100);
+                this.bombUI3D.userData.body.material.emissiveIntensity = 0.3;
+            } else {
+                this.bombUI3D.userData.spark.material.color.setHex(0xff4500);
+                this.bombUI3D.userData.sparkLight.color.setHex(0xff4500);
+                this.bombUI3D.userData.body.material.emissive.setHex(0x000000);
+                this.bombUI3D.userData.body.material.emissiveIntensity = 0;
+            }
+
+            // Si explosion
+            if (fuseProgress >= 1) {
+                this.makePlayerJumpBack();
+                this.bombStartTime = Date.now();
+            }
+        } else if (this.bombUI3D && this.hasFinished) {
+            // Faire disparaître la bombe quand terminé
+            this.bombUI3D.visible = false;
         }
 
         // Animation du système de progression
