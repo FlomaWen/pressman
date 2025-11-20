@@ -193,7 +193,11 @@ class MultiplayerGame {
             this.bombUI3D.visible = true;
         }
 
-        // Assigner les joueurs aux lignes
+        console.log('=== GAME START ===');
+        console.log('Players:', this.gameState.players.map(p => p.name));
+        console.log('My name:', this.playerName);
+
+        // Assigner les joueurs aux lignes AVANT de créer les obstacles
         this.assignPlayersToLanes();
 
         // Créer les obstacles pour le joueur local (APRÈS avoir assigné les lignes)
@@ -216,8 +220,8 @@ class MultiplayerGame {
             });
         }
 
-        // Le joueur local est TOUJOURS sur la ligne 3 (dernière ligne = en bas)
-        const myLaneIndex = 3;
+        // Le joueur local est TOUJOURS sur la ligne 0 (EN BAS, Y=-6)
+        const myLaneIndex = 0;
         const myLane = this.playerPaths[myLaneIndex];
 
         if (myLane) {
@@ -792,19 +796,21 @@ class MultiplayerGame {
     setupProgressionPath() {
         this.progressionGroup = new THREE.Group();
         this.progressionGroup.position.z = 10;
-        this.progressionGroup.position.y = -5; // Remonté de -10 à -5 pour ne pas être caché
+        this.progressionGroup.position.y = -5;
 
         // Créer 4 lignes de chemin (une par joueur)
+        // Lane 0 = EN BAS (Y=-6), Lane 3 = EN HAUT (Y=+6)
         this.playerPaths = [];
         const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00]; // Rouge, Vert, Bleu, Jaune
 
         for (let lane = 0; lane < 4; lane++) {
-            const laneY = (lane - 1.5) * 4; // Espacer les lignes
+            // Simple : lane 0 = -6 (EN BAS), lane 1 = -2, lane 2 = +2, lane 3 = +6 (EN HAUT)
+            const laneY = (lane - 1.5) * 4;
 
-            // Ligne du chemin (plus longue pour correspondre aux points)
+            // Ligne du chemin
             const pathGeometry = new THREE.BufferGeometry();
             const pathPoints = [];
-            const numPathPoints = 41; // 40 mots + 1
+            const numPathPoints = 41;
             for (let i = 0; i < numPathPoints; i++) {
                 pathPoints.push(new THREE.Vector3(i * 2, laneY, 0));
             }
@@ -816,9 +822,10 @@ class MultiplayerGame {
                 opacity: 0.5
             });
             const pathLine = new THREE.Line(pathGeometry, pathMaterial);
+            pathLine.userData.laneY = laneY; // IMPORTANT: Stocker le Y de la ligne
             this.progressionGroup.add(pathLine);
 
-            // Points de progression pour cette ligne (un point tous les 2 mots)
+            // Points de progression
             const dots = [];
             for (let i = 0; i <= 40; i += 2) {
                 const dotGeometry = new THREE.SphereGeometry(0.3, 16, 16);
@@ -830,16 +837,16 @@ class MultiplayerGame {
                 const dot = new THREE.Mesh(dotGeometry, dotMaterial);
                 dot.position.x = i * 2;
                 dot.position.y = laneY;
-                dot.visible = false; // Caché par défaut
+                dot.visible = false;
                 this.progressionGroup.add(dot);
                 dots.push(dot);
             }
 
-            // Personnage pour cette ligne
+            // Personnage
             const character = this.createCharacter(colors[lane]);
             character.position.x = 0;
             character.position.y = laneY;
-            character.visible = false; // Caché par défaut
+            character.visible = false;
             character.userData.progress = 0;
             character.userData.targetProgress = 0;
             this.progressionGroup.add(character);
@@ -850,11 +857,18 @@ class MultiplayerGame {
                 pathLine: pathLine,
                 dots: dots,
                 character: character,
-                playerName: null
+                playerName: null,
+                laneY: laneY // Stocker le Y pour debug
             });
         }
 
         this.scene.add(this.progressionGroup);
+
+        // DEBUG: Afficher les positions Y
+        console.log('=== LANES Y POSITIONS ===');
+        this.playerPaths.forEach((path, index) => {
+            console.log(`Lane ${index}: Y=${path.laneY} (${index === 0 ? 'EN BAS' : index === 3 ? 'EN HAUT' : 'MILIEU'})`);
+        });
     }
 
     createCharacter(color = 0x4444ff) {
@@ -946,37 +960,61 @@ class MultiplayerGame {
     assignPlayersToLanes() {
         if (!this.gameState || !this.gameState.players) return;
 
-        // Réorganiser pour que le joueur local soit toujours sur la ligne du bas (index 3)
-        // et les autres joueurs sur les lignes 0, 1, 2
         const allPlayers = this.gameState.players;
 
-        // Trouver le joueur local
-        const localPlayerData = allPlayers.find(p => p.name === this.playerName);
+        // Trouver l'index du joueur local dans la liste serveur
+        const myIndexInServer = allPlayers.findIndex(p => p.name === this.playerName);
 
-        // Autres joueurs (excluant le joueur local)
-        const otherPlayers = allPlayers.filter(p => p.name !== this.playerName);
+        if (myIndexInServer === -1) return;
 
-        // Créer l'assignation des lignes : lignes 0-2 = autres, ligne 3 = joueur local
-        const laneAssignments = [];
+        console.log('=== ASSIGN PLAYERS TO LANES ===');
+        console.log('Mon nom:', this.playerName);
+        console.log('Mon index serveur:', myIndexInServer);
+        console.log('Tous les joueurs:', allPlayers.map(p => p.name));
 
-        // Remplir les 3 premières lignes avec les autres joueurs
-        for (let i = 0; i < 3; i++) {
-            laneAssignments[i] = otherPlayers[i] || null;
-        }
+        // Le joueur local va TOUJOURS sur la ligne 0 (EN BAS, Y=-6)
+        const laneAssignments = [null, null, null, null];
 
-        // Ligne 3 = joueur local
-        laneAssignments[3] = localPlayerData || null;
+        // Ligne 0 = Joueur local
+        laneAssignments[0] = allPlayers[myIndexInServer];
+        console.log('→ Ligne 0 (EN BAS, Y=-6, rouge):', allPlayers[myIndexInServer].name);
+
+        // Lignes 1, 2, 3 = Autres joueurs
+        let otherLaneIndex = 1;
+        allPlayers.forEach((player, serverIndex) => {
+            if (serverIndex !== myIndexInServer && otherLaneIndex < 4) {
+                laneAssignments[otherLaneIndex] = player;
+                const laneColors = ['rouge', 'vert', 'bleu', 'jaune'];
+                const laneYs = [-6, -2, 2, 6];
+                console.log(`→ Ligne ${otherLaneIndex} (Y=${laneYs[otherLaneIndex]}, ${laneColors[otherLaneIndex]}):`, player.name);
+                otherLaneIndex++;
+            }
+        });
 
         // Appliquer l'assignation aux lignes 3D
         laneAssignments.forEach((playerData, laneIndex) => {
             const lane = this.playerPaths[laneIndex];
-            if (!lane) return;
+            if (!lane) {
+                console.error(`❌ Lane ${laneIndex} n'existe pas!`);
+                return;
+            }
 
             if (playerData) {
                 lane.playerName = playerData.name;
                 lane.character.visible = true;
                 lane.dots.forEach(dot => dot.visible = true);
                 lane.character.userData.targetProgress = (playerData.wordsCompleted / this.totalWords) * 100;
+
+                // IMPORTANT: Forcer la position Y du personnage
+                const expectedY = (laneIndex - 1.5) * 4;
+                lane.character.position.y = expectedY;
+
+                console.log(`  ✓ Lane ${laneIndex}:`);
+                console.log(`     - Joueur: ${playerData.name}`);
+                console.log(`     - Y attendu: ${expectedY}`);
+                console.log(`     - Y réel character: ${lane.character.position.y}`);
+                console.log(`     - Y pathLine: ${lane.pathLine.position.y}`);
+                console.log(`     - Character visible: ${lane.character.visible}`);
             } else {
                 lane.playerName = null;
                 lane.character.visible = false;
@@ -984,6 +1022,8 @@ class MultiplayerGame {
                 lane.character.userData.targetProgress = 0;
             }
         });
+
+        console.log('=== FIN ASSIGN PLAYERS ===');
     }
 
     showErrorMessage() {
@@ -1125,8 +1165,8 @@ class MultiplayerGame {
         // Animation du système de progression
         if (this.progressionGroup && this.playerPaths) {
             const lerpSpeed = 0.05;
-            // Le joueur local est TOUJOURS sur la ligne 3 (dernière ligne)
-            const myLaneIndex = 3;
+            // Le joueur local est TOUJOURS sur la ligne 0 (EN BAS)
+            const myLaneIndex = 0;
 
             // Animer chaque personnage
             this.playerPaths.forEach((lane, index) => {
@@ -1143,9 +1183,9 @@ class MultiplayerGame {
                     // Animation de saut pour le joueur local
                     if (index === myLaneIndex && this.isJumping) {
                         const jumpHeight = Math.sin(time * 20) * 2;
-                        lane.character.position.y = lane.pathLine.position.y + Math.abs(jumpHeight);
+                        lane.character.position.y = lane.pathLine.userData.laneY + Math.abs(jumpHeight);
                     } else {
-                        lane.character.position.y = lane.pathLine.position.y;
+                        lane.character.position.y = lane.pathLine.userData.laneY;
                     }
 
                     // Animer les points de cette ligne
@@ -1155,7 +1195,7 @@ class MultiplayerGame {
                 }
             });
 
-            // Faire suivre la caméra au joueur local (ligne 3)
+            // Faire suivre la caméra au joueur local (ligne 0)
             if (this.playerPaths[myLaneIndex]) {
                 const myCharacter = this.playerPaths[myLaneIndex].character;
                 const targetCameraX = myCharacter.position.x;
