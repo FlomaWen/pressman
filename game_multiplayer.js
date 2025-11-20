@@ -415,6 +415,32 @@ class MultiplayerGame {
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // Ajouter les particules de fond
+        this.setupParticles();
+    }
+
+    setupParticles() {
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 200;
+        const posArray = new Float32Array(particlesCount * 3);
+
+        for (let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 100;
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.3,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+        });
+
+        this.particles = new THREE.Points(particlesGeometry, particlesMaterial);
+        this.scene.add(this.particles);
     }
 
     setupProgressionPath() {
@@ -429,11 +455,12 @@ class MultiplayerGame {
         for (let lane = 0; lane < 4; lane++) {
             const laneY = (lane - 1.5) * 4; // Espacer les lignes
 
-            // Ligne du chemin
+            // Ligne du chemin (plus longue pour correspondre aux points)
             const pathGeometry = new THREE.BufferGeometry();
             const pathPoints = [];
-            for (let i = 0; i < 50; i++) {
-                pathPoints.push(new THREE.Vector3(i * 3 - 75, laneY, 0));
+            const numPathPoints = 41; // 40 mots + 1
+            for (let i = 0; i < numPathPoints; i++) {
+                pathPoints.push(new THREE.Vector3(i * 2, laneY, 0));
             }
             pathGeometry.setFromPoints(pathPoints);
             const pathMaterial = new THREE.LineBasicMaterial({
@@ -445,9 +472,9 @@ class MultiplayerGame {
             const pathLine = new THREE.Line(pathGeometry, pathMaterial);
             this.progressionGroup.add(pathLine);
 
-            // Points de progression pour cette ligne
+            // Points de progression pour cette ligne (un point tous les 2 mots)
             const dots = [];
-            for (let i = 0; i < 25; i++) {
+            for (let i = 0; i <= 40; i += 2) {
                 const dotGeometry = new THREE.SphereGeometry(0.3, 16, 16);
                 const dotMaterial = new THREE.MeshStandardMaterial({
                     color: colors[lane],
@@ -455,7 +482,7 @@ class MultiplayerGame {
                     emissiveIntensity: 0.8
                 });
                 const dot = new THREE.Mesh(dotGeometry, dotMaterial);
-                dot.position.x = i * 4;
+                dot.position.x = i * 2;
                 dot.position.y = laneY;
                 dot.visible = false; // Caché par défaut
                 this.progressionGroup.add(dot);
@@ -581,9 +608,28 @@ class MultiplayerGame {
     assignPlayersToLanes() {
         if (!this.gameState || !this.gameState.players) return;
 
-        this.gameState.players.forEach((player, index) => {
-            if (index < 4 && this.playerPaths[index]) {
-                const lane = this.playerPaths[index];
+        // Trouver l'index du joueur local dans la liste des joueurs
+        const myPlayerIndex = this.gameState.players.findIndex(p => p.name === this.playerName);
+
+        // Réorganiser les joueurs pour que le joueur local soit en premier
+        const reorderedPlayers = [];
+        if (myPlayerIndex >= 0) {
+            reorderedPlayers.push(this.gameState.players[myPlayerIndex]); // Joueur local en premier
+
+            // Ajouter les autres joueurs
+            this.gameState.players.forEach((player, index) => {
+                if (index !== myPlayerIndex) {
+                    reorderedPlayers.push(player);
+                }
+            });
+        } else {
+            // Si on ne trouve pas le joueur local, utiliser l'ordre normal
+            reorderedPlayers.push(...this.gameState.players);
+        }
+
+        reorderedPlayers.forEach((player, laneIndex) => {
+            if (laneIndex < 4 && this.playerPaths[laneIndex]) {
+                const lane = this.playerPaths[laneIndex];
                 lane.playerName = player.name;
                 lane.character.visible = true;
                 lane.bomb.visible = true; // Afficher la bombe
@@ -636,15 +682,17 @@ class MultiplayerGame {
 
         const time = Date.now() * 0.001;
 
+        // Animer les particules
+        if (this.particles) {
+            this.particles.rotation.y = time * 0.05;
+            this.particles.rotation.x = time * 0.03;
+        }
+
         // Animation du système de progression
         if (this.progressionGroup && this.playerPaths) {
             const lerpSpeed = 0.05;
-            let myLaneIndex = -1;
-
-            // Trouver ma ligne
-            if (this.gameState && this.gameState.players) {
-                myLaneIndex = this.gameState.players.findIndex(p => p.name === this.playerName);
-            }
+            // Le joueur local est toujours sur la première ligne (index 0)
+            const myLaneIndex = 0;
 
             // Animer chaque personnage et bombe
             this.playerPaths.forEach((lane, index) => {
