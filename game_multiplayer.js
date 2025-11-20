@@ -17,6 +17,12 @@ class MultiplayerGame {
         this.totalKeystrokes = 0;
         this.correctKeystrokes = 0;
 
+        // Bomb system (local pour ce joueur)
+        this.bombMaxTime = 10000; // 10 secondes par mot
+        this.bombStartTime = Date.now();
+        this.errorCount = 0;
+        this.maxErrors = 2;
+
         this.setupLoginScreen();
     }
 
@@ -198,9 +204,10 @@ class MultiplayerGame {
                     this.wordsCompleted++;
                     this.currentWordIndex++;
                     this.typedText = '';
+                    this.errorCount = 0; // Reset erreurs
+                    this.bombStartTime = Date.now(); // Reset timer bombe
 
                     this.updateWPM();
-                    this.advanceCharacter();
                     this.updateProgress();
 
                     // Envoyer la progression au serveur
@@ -216,6 +223,14 @@ class MultiplayerGame {
             } else {
                 // Erreur
                 this.typedText = '';
+                this.errorCount++;
+
+                if (this.errorCount >= this.maxErrors) {
+                    // 2 erreurs = retour en arrière
+                    this.makePlayerJumpBack();
+                    this.errorCount = 0;
+                }
+
                 this.updateWordDisplay();
             }
         }
@@ -249,6 +264,23 @@ class MultiplayerGame {
         progressFill.textContent = `${this.wordsCompleted}/${this.totalWords}`;
 
         document.getElementById('words-count').textContent = `${this.wordsCompleted}/${this.totalWords}`;
+
+        // Mettre à jour le compteur d'erreurs
+        const errorCount = document.getElementById('error-count');
+        if (errorCount) {
+            errorCount.textContent = `${this.errorCount}/${this.maxErrors}`;
+            errorCount.style.color = this.errorCount >= 1 ? '#ff0000' : '#ffffff';
+        }
+    }
+
+    updateBombTimer() {
+        const bombTimer = document.getElementById('bomb-timer');
+        if (bombTimer && this.gameState && this.gameState.status === 'playing') {
+            const elapsed = Date.now() - this.bombStartTime;
+            const remaining = Math.max(0, (this.bombMaxTime - elapsed) / 1000);
+            bombTimer.textContent = `${remaining.toFixed(1)}s`;
+            bombTimer.style.color = remaining < 3 ? '#ff0000' : remaining < 5 ? '#ffaa00' : '#00ff00';
+        }
     }
 
     updateWPM() {
@@ -413,12 +445,20 @@ class MultiplayerGame {
             character.userData.targetProgress = 0;
             this.progressionGroup.add(character);
 
+            // Bombe pour cette ligne
+            const bomb = this.createBomb(colors[lane]);
+            bomb.position.x = -5; // Devant le personnage
+            bomb.position.y = laneY;
+            bomb.visible = false;
+            this.progressionGroup.add(bomb);
+
             this.playerPaths.push({
                 lane: lane,
                 color: colors[lane],
                 pathLine: pathLine,
                 dots: dots,
                 character: character,
+                bomb: bomb,
                 playerName: null
             });
         }
@@ -467,6 +507,51 @@ class MultiplayerGame {
         return character;
     }
 
+    createBomb(color = 0x1a1a1a) {
+        const bombGroup = new THREE.Group();
+        const scale = 0.8; // Plus petit
+
+        // Corps de la bombe
+        const bombGeometry = new THREE.SphereGeometry(1 * scale, 16, 16);
+        const bombMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a1a,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const bombBody = new THREE.Mesh(bombGeometry, bombMaterial);
+        bombGroup.add(bombBody);
+
+        // Mèche
+        const fuseGeometry = new THREE.CylinderGeometry(0.1 * scale, 0.1 * scale, 2 * scale, 8);
+        const fuseMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
+        fuse.position.y = 1.5 * scale;
+        bombGroup.add(fuse);
+
+        // Étincelle
+        const sparkGeometry = new THREE.SphereGeometry(0.2 * scale, 8, 8);
+        const sparkMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff4500,
+            emissive: 0xff4500,
+            emissiveIntensity: 2
+        });
+        const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+        spark.position.y = 2.5 * scale;
+        bombGroup.add(spark);
+
+        // Lumière
+        const sparkLight = new THREE.PointLight(0xff4500, 1, 5);
+        spark.add(sparkLight);
+
+        bombGroup.userData = {
+            spark: spark,
+            sparkLight: sparkLight,
+            fuseProgress: 0
+        };
+
+        return bombGroup;
+    }
+
     assignPlayersToLanes() {
         if (!this.gameState || !this.gameState.players) return;
 
@@ -475,6 +560,7 @@ class MultiplayerGame {
                 const lane = this.playerPaths[index];
                 lane.playerName = player.name;
                 lane.character.visible = true;
+                lane.bomb.visible = true; // Afficher la bombe
 
                 // Afficher les points pour cette ligne
                 lane.dots.forEach(dot => dot.visible = true);
@@ -482,12 +568,28 @@ class MultiplayerGame {
                 // Mettre à jour la progression
                 const progress = (player.wordsCompleted / this.totalWords) * 100;
                 lane.character.userData.targetProgress = progress;
+
+                // Positionner la bombe devant le personnage
+                lane.bomb.position.x = lane.character.userData.progress - 5;
             }
         });
     }
 
-    advanceCharacter() {
-        // Cette méthode n'est plus nécessaire, la progression est gérée par assignPlayersToLanes
+    makePlayerJumpBack() {
+        // Reculer d'un mot (2.5% de progression)
+        this.wordsCompleted = Math.max(0, this.wordsCompleted - 1);
+        this.currentWordIndex = this.wordsCompleted;
+
+        // Envoyer la mise à jour
+        this.socket.emit('player_progress', {
+            wordsCompleted: this.wordsCompleted,
+            wpm: this.currentWPM
+        });
+
+        // Reset le mot actuel
+        this.typedText = '';
+        this.updateWordDisplay();
+        this.updateProgress();
     }
 
     animate() {
@@ -498,9 +600,15 @@ class MultiplayerGame {
         // Animation du système de progression
         if (this.progressionGroup && this.playerPaths) {
             const lerpSpeed = 0.05;
+            let myLaneIndex = -1;
 
-            // Animer chaque personnage
-            this.playerPaths.forEach((lane) => {
+            // Trouver ma ligne
+            if (this.gameState && this.gameState.players) {
+                myLaneIndex = this.gameState.players.findIndex(p => p.name === this.playerName);
+            }
+
+            // Animer chaque personnage et bombe
+            this.playerPaths.forEach((lane, index) => {
                 if (lane.character.visible) {
                     // Calculer la position X basée sur la progression (0-100%)
                     const maxDistance = 80; // Distance maximale en unités 3D
@@ -511,12 +619,51 @@ class MultiplayerGame {
                     lane.character.userData.progress += (targetX - currentX) * lerpSpeed;
                     lane.character.position.x = lane.character.userData.progress;
 
+                    // Animer la bombe pour cette ligne
+                    if (lane.bomb.visible) {
+                        // Positionner la bombe devant le personnage
+                        lane.bomb.position.x = lane.character.position.x - 5;
+
+                        // Animer l'étincelle si c'est ma ligne
+                        if (index === myLaneIndex && this.gameState.status === 'playing') {
+                            const elapsed = Date.now() - this.bombStartTime;
+                            const fuseProgress = Math.min(elapsed / this.bombMaxTime, 1);
+
+                            // Déplacer l'étincelle vers le bas
+                            lane.bomb.userData.spark.position.y = 2.5 * (1 - fuseProgress);
+                            lane.bomb.userData.spark.scale.setScalar(1 + Math.sin(time * 20) * 0.3);
+                            lane.bomb.userData.sparkLight.intensity = 1 + Math.sin(time * 20) * 0.5;
+
+                            // Si la mèche atteint la bombe, explosion !
+                            if (fuseProgress >= 1) {
+                                this.makePlayerJumpBack();
+                                this.bombStartTime = Date.now();
+                            }
+                        }
+
+                        // Rotation de la bombe
+                        lane.bomb.rotation.y = time * 0.5;
+                    }
+
                     // Animer les points de cette ligne
                     lane.dots.forEach((dot, index) => {
                         dot.material.emissiveIntensity = 0.5 + Math.sin(time * 2 + index * 0.5) * 0.3;
                     });
                 }
             });
+
+            // Faire suivre la caméra au joueur local
+            if (myLaneIndex >= 0 && this.playerPaths[myLaneIndex]) {
+                const myCharacter = this.playerPaths[myLaneIndex].character;
+                const targetCameraX = myCharacter.position.x;
+
+                // Déplacer le groupe pour garder le joueur centré
+                const targetGroupX = -targetCameraX;
+                this.progressionGroup.position.x += (targetGroupX - this.progressionGroup.position.x) * 0.05;
+            }
+
+            // Mettre à jour le timer de la bombe
+            this.updateBombTimer();
         }
 
         this.renderer.render(this.scene, this.camera);
