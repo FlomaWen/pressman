@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pressman - Menu Principal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial Black', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            color: white;
+            max-width: 800px;
+            padding: 40px;
+        }
+
+        h1 {
+            font-size: 80px;
+            margin-bottom: 20px;
+            text-shadow: 5px 5px 15px rgba(0, 0, 0, 0.5);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .subtitle {
+            font-size: 24px;
+            margin-bottom: 50px;
+            opacity: 0.9;
+        }
+
+        .game-modes {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .mode-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            width: 350px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            color: #333;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .mode-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        .mode-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        .mode-title {
+            font-size: 32px;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .mode-description {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .mode-features {
+            list-style: none;
+            text-align: left;
+            font-size: 14px;
+            color: #888;
+        }
+
+        .mode-features li {
+            margin: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .mode-features li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #00ff00;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .btn-play {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .btn-play:hover {
+            transform: scale(1.1);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .footer {
+            margin-top: 50px;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #ff6b6b;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .badge.new {
+            background: #51cf66;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 PRESSMAN</h1>
+        <div class="subtitle">Choisissez votre mode de jeu</div>
+
+        <div class="game-modes">
+            <!-- Mode Solo -->
+            <a href="index.html" class="mode-card">
+                <div class="mode-icon">🎯</div>
+                <div class="mode-title">MODE SOLO</div>
+                <div class="mode-description">
+                    Entraînez-vous à votre rythme et améliorez votre vitesse de frappe !
+                </div>
+                <ul class="mode-features">
+                    <li>Bombe avec mèche à brûler</li>
+                    <li>2 erreurs = explosion</li>
+                    <li>Personnage 3D animé</li>
+                    <li>Système de combo</li>
+                    <li>350+ mots variés</li>
+                    <li>WPM et précision en temps réel</li>
+                </ul>
+                <button class="btn-play">JOUER SOLO</button>
+            </a>
+
+            <!-- Mode Multijoueur -->
+            <a href="multiplayer.html" class="mode-card">
+                <div class="mode-icon">🏁</div>
+                <div class="mode-title">MODE COURSE</div>
+                <span class="badge new">NOUVEAU</span>
+                <div class="mode-description">
+                    Affrontez d'autres joueurs en temps réel dans une course épique !
+                </div>
+                <ul class="mode-features">
+                    <li>2 à 4 joueurs simultanés</li>
+                    <li>Course de 40 mots</li>
+                    <li>Leaderboard en direct</li>
+                    <li>Synchronisation temps réel</li>
+                    <li>Classement final</li>
+                    <li>Matchmaking automatique</li>
+                </ul>
+                <button class="btn-play">JOUER EN LIGNE</button>
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>💡 Astuce : Utilisez le mode Solo pour vous entraîner avant d'affronter d'autres joueurs !</p>
+            <p style="margin-top: 10px;">⌨️ Tapez les mots le plus vite possible | 🚀 Améliorez votre vitesse | 🏆 Devenez le meilleur !</p>
+        </div>
+    </div>
+
+    <script>
+        // Animation de particules en arrière-plan
+        const canvas = document.createElement('canvas');
+        canvas.style.position = 'fixed';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = '-1';
+        document.body.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        for (let i = 0; i < 50; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                size: Math.random() * 3 + 1
+            });
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(102, 126, 234, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
+

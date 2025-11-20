@@ -1,0 +1,31 @@
+{
+  "name": "pressman-multiplayer",
+  "version": "1.0.0",
+  "description": "Jeu de dactylographie multijoueur avec Three.js et WebSockets",
+  "main": "server_websocket.js",
+  "scripts": {
+    "start": "node server_websocket.js",
+    "dev": "nodemon server_websocket.js"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "typing",
+    "game",
+    "multiplayer",
+    "websocket",
+    "threejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+
