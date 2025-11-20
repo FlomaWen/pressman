@@ -440,8 +440,8 @@ class MultiplayerGame {
     setupBombUI() {
         // Créer une bombe 3D fixe pour l'UI (à côté du mot)
         this.bombUI3D = this.createBombForUI();
-        this.bombUI3D.position.set(15, 5, 20); // Position fixe à droite du mot
-        this.bombUI3D.scale.setScalar(1.5); // Plus grande
+        this.bombUI3D.position.set(8, 5, 20); // Position rapprochée du mot
+        this.bombUI3D.scale.setScalar(1.2); // Taille réduite
         this.scene.add(this.bombUI3D);
     }
 
@@ -569,20 +569,12 @@ class MultiplayerGame {
             character.userData.targetProgress = 0;
             this.progressionGroup.add(character);
 
-            // Bombe pour cette ligne
-            const bomb = this.createBomb(colors[lane]);
-            bomb.position.x = -5; // Devant le personnage
-            bomb.position.y = laneY;
-            bomb.visible = false;
-            this.progressionGroup.add(bomb);
-
             this.playerPaths.push({
                 lane: lane,
                 color: colors[lane],
                 pathLine: pathLine,
                 dots: dots,
                 character: character,
-                bomb: bomb,
                 playerName: null
             });
         }
@@ -703,17 +695,12 @@ class MultiplayerGame {
                 const lane = this.playerPaths[laneIndex];
                 lane.playerName = player.name;
                 lane.character.visible = true;
-                lane.bomb.visible = true; // Afficher la bombe
 
                 // Afficher les points pour cette ligne
                 lane.dots.forEach(dot => dot.visible = true);
 
                 // Mettre à jour la progression
-                const progress = (player.wordsCompleted / this.totalWords) * 100;
-                lane.character.userData.targetProgress = progress;
-
-                // Positionner la bombe devant le personnage
-                lane.bomb.position.x = lane.character.userData.progress - 5;
+                lane.character.userData.targetProgress = (player.wordsCompleted / this.totalWords) * 100;
             }
         });
     }
@@ -819,34 +806,6 @@ class MultiplayerGame {
                     lane.character.userData.progress += (targetX - currentX) * lerpSpeed;
                     lane.character.position.x = lane.character.userData.progress;
 
-                    // Animer la bombe pour cette ligne
-                    if (lane.bomb.visible) {
-                        // Positionner la bombe devant le personnage
-                        lane.bomb.position.x = lane.character.position.x - 5;
-
-                        // Animer l'étincelle si c'est ma ligne ET que je n'ai pas fini
-                        if (index === myLaneIndex && this.gameState.status === 'playing' && !this.hasFinished) {
-                            const elapsed = Date.now() - this.bombStartTime;
-                            const fuseProgress = Math.min(elapsed / this.bombMaxTime, 1);
-
-                            // Déplacer l'étincelle vers le bas
-                            lane.bomb.userData.spark.position.y = 2.5 * (1 - fuseProgress);
-                            lane.bomb.userData.spark.scale.setScalar(1 + Math.sin(time * 20) * 0.3);
-                            lane.bomb.userData.sparkLight.intensity = 1 + Math.sin(time * 20) * 0.5;
-
-                            // Si la mèche atteint la bombe, explosion !
-                            if (fuseProgress >= 1) {
-                                this.makePlayerJumpBack();
-                                this.bombStartTime = Date.now();
-                            }
-                        } else if (index === myLaneIndex && this.hasFinished) {
-                            // Éteindre l'étincelle si terminé
-                            lane.bomb.userData.spark.visible = false;
-                        }
-
-                        // Rotation de la bombe
-                        lane.bomb.rotation.y = time * 0.5;
-                    }
 
                     // Animer les points de cette ligne
                     lane.dots.forEach((dot, index) => {
